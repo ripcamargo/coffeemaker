@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CoffeeMaker",
   description: "Ferramenta interna para sorteio de café e limpeza da máquina",
+  icons: {
+    icon: "/images/logo_CoffeeMaker_rounded.ico",
+  },
 };
 
 export default function RootLayout({
