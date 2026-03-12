@@ -49,6 +49,7 @@ npm run dev
 - `employees`
 - `draws`
 - `rounds`
+- `coffeePurchases`
 
 ## Regras principais
 

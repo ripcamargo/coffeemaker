@@ -7,14 +7,16 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Draw, DrawType, Employee, Round, RoundStatus } from "@/types";
+import { CoffeePurchase, Draw, DrawType, Employee, Round, RoundStatus } from "@/types";
 
 const EMPLOYEES_COLLECTION = "employees";
 const DRAWS_COLLECTION = "draws";
 const ROUNDS_COLLECTION = "rounds";
+const COFFEE_PURCHASES_COLLECTION = "coffeePurchases";
 const GLOBAL_ROUND_TYPE: DrawType = "coffee";
 
 function mapEmployee(docItem: { id: string; data: () => Record<string, unknown> }): Employee {
@@ -46,6 +48,16 @@ function mapDraw(docItem: { id: string; data: () => Record<string, unknown> }): 
     roundNumber: Number(data.roundNumber ?? 1),
     date: data.date as Draw["date"],
     accepted: Boolean(data.accepted),
+  };
+}
+
+function mapCoffeePurchase(docItem: { id: string; data: () => Record<string, unknown> }): CoffeePurchase {
+  const data = docItem.data();
+  return {
+    id: docItem.id,
+    buyerName: String(data.buyerName ?? ""),
+    purchaseDate: data.purchaseDate as CoffeePurchase["purchaseDate"],
+    createdAt: data.createdAt as CoffeePurchase["createdAt"],
   };
 }
 
@@ -171,4 +183,38 @@ export async function getDrawHistory(): Promise<Draw[]> {
   const drawsQuery = query(drawsRef, orderBy("date", "desc"));
   const snapshot = await getDocs(drawsQuery);
   return snapshot.docs.map(mapDraw);
+}
+
+export async function addCoffeePurchase(input: { buyerName: string; purchaseDate: string }): Promise<void> {
+  const normalizedName = input.buyerName.trim();
+  if (!normalizedName) {
+    throw new Error("Informe quem comprou o café.");
+  }
+
+  if (!input.purchaseDate) {
+    throw new Error("Informe a data da compra.");
+  }
+
+  const parsedDate = new Date(`${input.purchaseDate}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error("Data de compra inválida.");
+  }
+
+  await addDoc(collection(db, COFFEE_PURCHASES_COLLECTION), {
+    buyerName: normalizedName,
+    purchaseDate: Timestamp.fromDate(parsedDate),
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function getCoffeePurchaseHistory(): Promise<CoffeePurchase[]> {
+  const purchasesRef = collection(db, COFFEE_PURCHASES_COLLECTION);
+  const purchasesQuery = query(purchasesRef, orderBy("purchaseDate", "desc"));
+  const snapshot = await getDocs(purchasesQuery);
+  return snapshot.docs.map(mapCoffeePurchase);
+}
+
+export async function removeCoffeePurchase(purchaseId: string): Promise<void> {
+  await deleteDoc(doc(db, COFFEE_PURCHASES_COLLECTION, purchaseId));
 }

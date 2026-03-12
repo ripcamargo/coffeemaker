@@ -1,8 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { addEmployee, acceptDraw, getDrawHistory, getRoundStatus, removeEmployee } from "@/lib/coffee-service";
-import { Draw, DrawType, Employee } from "@/types";
+import {
+  addCoffeePurchase,
+  addEmployee,
+  acceptDraw,
+  getCoffeePurchaseHistory,
+  getDrawHistory,
+  getRoundStatus,
+  removeCoffeePurchase,
+  removeEmployee,
+} from "@/lib/coffee-service";
+import { CoffeePurchase, Draw, DrawType, Employee } from "@/types";
 
 const drawTypeLabel: Record<DrawType, string> = {
   coffee: "Café",
@@ -17,12 +26,23 @@ function formatDate(value?: Draw["date"]) {
   return value.toDate().toLocaleString("pt-BR");
 }
 
+function formatPurchaseDate(value?: CoffeePurchase["purchaseDate"]) {
+  if (!value) {
+    return "-";
+  }
+
+  return value.toDate().toLocaleDateString("pt-BR");
+}
+
 export default function Home() {
   const [drawType, setDrawType] = useState<DrawType>("coffee");
   const [name, setName] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
   const [draws, setDraws] = useState<Draw[]>([]);
+  const [coffeePurchases, setCoffeePurchases] = useState<CoffeePurchase[]>([]);
+  const [purchaseBuyerName, setPurchaseBuyerName] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [roundNumber, setRoundNumber] = useState(1);
   const [selected, setSelected] = useState<Employee | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,11 +63,16 @@ export default function Home() {
     setError(null);
 
     try {
-      const [status, history] = await Promise.all([getRoundStatus(), getDrawHistory()]);
+      const [status, history, purchaseHistory] = await Promise.all([
+        getRoundStatus(),
+        getDrawHistory(),
+        getCoffeePurchaseHistory(),
+      ]);
       setRoundNumber(status.round.roundNumber);
       setEmployees(status.employees);
       setAvailableEmployees(status.availableEmployees);
       setDraws(history);
+      setCoffeePurchases(purchaseHistory);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Erro ao carregar dados.");
     } finally {
@@ -135,6 +160,42 @@ export default function Home() {
       await loadData();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Erro ao remover colaborador.");
+    }
+  }
+
+  async function handlePurchaseSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!purchaseBuyerName.trim()) {
+      setError("Informe quem comprou o café.");
+      return;
+    }
+
+    if (!purchaseDate) {
+      setError("Informe a data da compra.");
+      return;
+    }
+
+    try {
+      setError(null);
+      await addCoffeePurchase({
+        buyerName: purchaseBuyerName,
+        purchaseDate,
+      });
+      setPurchaseBuyerName("");
+      await loadData();
+    } catch (purchaseError) {
+      setError(purchaseError instanceof Error ? purchaseError.message : "Erro ao registrar compra de café.");
+    }
+  }
+
+  async function handlePurchaseDelete(purchaseId: string) {
+    try {
+      setError(null);
+      await removeCoffeePurchase(purchaseId);
+      await loadData();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Erro ao remover compra de café.");
     }
   }
 
@@ -369,6 +430,75 @@ export default function Home() {
                     <td className="px-6 py-4 font-semibold">{draw.employeeName}</td>
                     <td className="px-6 py-4">{drawTypeLabel[draw.type]}</td>
                     <td className="px-6 py-4 font-semibold">{draw.roundNumber}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-8 overflow-hidden rounded-[32px] border border-amber-300/80 bg-white/90 shadow-[0_24px_80px_-32px_rgba(120,53,15,0.18)]">
+        <div className="border-b border-amber-300 px-6 py-4">
+          <h2 className="text-2xl font-black text-amber-950">Histórico de Compras de Café</h2>
+        </div>
+
+        <form onSubmit={handlePurchaseSubmit} className="px-6 py-5">
+          <div className="grid gap-3 sm:grid-cols-[1fr_200px_auto]">
+            <input
+              value={purchaseBuyerName}
+              onChange={(event) => setPurchaseBuyerName(event.target.value)}
+              placeholder="Quem comprou o café"
+              className="rounded-2xl border border-amber-300 bg-white px-4 py-3.5 text-amber-950 outline-none transition focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+            />
+            <input
+              type="date"
+              value={purchaseDate}
+              onChange={(event) => setPurchaseDate(event.target.value)}
+              className="rounded-2xl border border-amber-300 bg-white px-4 py-3.5 text-amber-950 outline-none transition focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+            />
+            <button
+              type="submit"
+              className="rounded-2xl bg-gradient-to-r from-amber-700 via-amber-800 to-amber-950 px-5 py-3.5 font-bold text-amber-50"
+            >
+              Adicionar compra
+            </button>
+          </div>
+        </form>
+
+        <div className="overflow-x-auto border-t border-amber-200">
+          <table className="w-full min-w-[520px] border-collapse">
+            <thead>
+              <tr className="bg-amber-100 text-left text-sm text-amber-900">
+                <th className="px-6 py-4 font-bold">Data da compra</th>
+                <th className="px-6 py-4 font-bold">Quem comprou</th>
+                <th className="px-6 py-4 font-bold">Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coffeePurchases.length === 0 ? (
+                <tr>
+                  <td className="px-6 py-8 text-center text-amber-800" colSpan={3}>
+                    Nenhuma compra de café registrada ainda.
+                  </td>
+                </tr>
+              ) : (
+                coffeePurchases.map((purchase, index) => (
+                  <tr
+                    key={purchase.id}
+                    className={`border-t border-amber-200 text-sm text-amber-950 ${index % 2 === 0 ? "bg-white" : "bg-amber-50"}`}
+                  >
+                    <td className="px-6 py-4">{formatPurchaseDate(purchase.purchaseDate)}</td>
+                    <td className="px-6 py-4 font-semibold">{purchase.buyerName}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => handlePurchaseDelete(purchase.id)}
+                        className="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Remover
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}

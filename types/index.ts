@@ -25,6 +25,13 @@ export interface Draw {
   accepted: boolean;
 }
 
+export interface CoffeePurchase {
+  id: string;
+  buyerName: string;
+  purchaseDate?: Timestamp;
+  createdAt?: Timestamp;
+}
+
 export interface RoundStatus {
   round: Round;
   employees: Employee[];
